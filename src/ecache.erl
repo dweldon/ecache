@@ -50,13 +50,15 @@ flush() ->
 %                                                  {error, not_found} |
 %                                                  {error, not_an_integer}
 increment(Namespace, Key) ->
-    gen_server:call(?MODULE, {increment, Namespace, Key}).
+    Fun = fun(X) -> X + 1 end,
+    gen_server:call(?MODULE, {increment_or_decrement, Namespace, Key, Fun}).
 
 % @spec decrement(Namespace::any(), Key::any()) -> {ok, integer()} |
 %                                                  {error, not_found} |
 %                                                  {error, not_an_integer}
 decrement(Namespace, Key) ->
-    gen_server:call(?MODULE, {decrement, Namespace, Key}).
+    Fun = fun(X) -> X - 1 end,
+    gen_server:call(?MODULE, {increment_or_decrement, Namespace, Key, Fun}).
 
 %-------------------------------------------------------------------------------
 handle_call({load, Namespace, Key}, _From, Table) ->
@@ -70,7 +72,7 @@ handle_call({load, Namespace, Key}, _From, Table) ->
 handle_call(count, _From, Table) ->
     Count = proplists:get_value(size, ets:info(Table)),
     {reply, Count, Table};
-handle_call({increment, Namespace, Key}, _From, Table) ->
+handle_call({increment_or_decrement, Namespace, Key, Fun}, _From, Table) ->
     case ets:lookup(Table, {Namespace, Key}) of
         [] ->
             {reply, {error, not_found}, Table};
@@ -78,22 +80,9 @@ handle_call({increment, Namespace, Key}, _From, Table) ->
             {{Namespace, Key}, Value} = Data,
             case is_integer(Value) of
                 true ->
-                    true = ets:insert(Table, {{Namespace, Key}, Value+1}),
-                    {reply, {ok, Value+1}, Table};
-                false ->
-                    {reply, {error, not_an_integer}, Table}
-            end
-    end;
-handle_call({decrement, Namespace, Key}, _From, Table) ->
-    case ets:lookup(Table, {Namespace, Key}) of
-        [] ->
-            {reply, {error, not_found}, Table};
-        [Data|_] ->
-            {{Namespace, Key}, Value} = Data,
-            case is_integer(Value) of
-                true ->
-                    true = ets:insert(Table, {{Namespace, Key}, Value-1}),
-                    {reply, {ok, Value-1}, Table};
+                    NewValue = apply(Fun, [Value]),
+                    true = ets:insert(Table, {{Namespace, Key}, NewValue}),
+                    {reply, {ok, NewValue}, Table};
                 false ->
                     {reply, {error, not_an_integer}, Table}
             end
