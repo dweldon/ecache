@@ -2,8 +2,6 @@
 -behaviour(gen_server).
 
 % TODO:
-% increment/1
-% decrement/1
 % delete/1
 % count/0
 % flush/0
@@ -11,7 +9,9 @@
 -export([start_link/0,
          stop/0,
          load/2,
-         store/3]).
+         store/3,
+         increment/2,
+         decrement/2]).
 -export([init/1,
          handle_call/3,
          handle_cast/2,
@@ -30,7 +30,7 @@ init([]) ->
     Table = ets:new(ecache_table, [private]),
     {ok, Table}.
 
-% @spec load(Namespace::any(), Key::any()) -> {ok, any()} | {error, none}
+% @spec load(Namespace::any(), Key::any()) -> {ok, any()} | {error, not_found}
 load(Namespace, Key) ->
     gen_server:call(?MODULE, {load, Namespace, Key}).
 
@@ -38,13 +38,53 @@ load(Namespace, Key) ->
 store(Namespace, Key, Value) ->
     gen_server:cast(?MODULE, {store, Namespace, Key, Value}).
 
+% @spec increment(Namespace::any(), Key::any()) -> {ok, integer()} |
+%                                                  {error, not_found} |
+%                                                  {error, not_an_integer}
+increment(Namespace, Key) ->
+    gen_server:call(?MODULE, {increment, Namespace, Key}).
+
+% @spec decrement(Namespace::any(), Key::any()) -> {ok, integer()} |
+%                                                  {error, not_found} |
+%                                                  {error, not_an_integer}
+decrement(Namespace, Key) ->
+    gen_server:call(?MODULE, {decrement, Namespace, Key}).
+
 handle_call({load, Namespace, Key}, _From, Table) ->
     case ets:lookup(Table, {Namespace, Key}) of
         [] ->
-            {reply, {error, none}, Table};
+            {reply, {error, not_found}, Table};
         [Data|_] ->
             {{Namespace, Key}, Value} = Data,
             {reply, {ok, Value}, Table}
+    end;
+handle_call({increment, Namespace, Key}, _From, Table) ->
+    case ets:lookup(Table, {Namespace, Key}) of
+        [] ->
+            {reply, {error, not_found}, Table};
+        [Data|_] ->
+            {{Namespace, Key}, Value} = Data,
+            case is_integer(Value) of
+                true ->
+                    true = ets:insert(Table, {{Namespace, Key}, Value+1}),
+                    {reply, {ok, Value+1}, Table};
+                false ->
+                    {reply, {error, not_an_integer}, Table}
+            end
+    end;
+handle_call({decrement, Namespace, Key}, _From, Table) ->
+    case ets:lookup(Table, {Namespace, Key}) of
+        [] ->
+            {reply, {error, not_found}, Table};
+        [Data|_] ->
+            {{Namespace, Key}, Value} = Data,
+            case is_integer(Value) of
+                true ->
+                    true = ets:insert(Table, {{Namespace, Key}, Value-1}),
+                    {reply, {ok, Value-1}, Table};
+                false ->
+                    {reply, {error, not_an_integer}, Table}
+            end
     end;
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
@@ -67,6 +107,28 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+increment_test() ->
+    ecache:start_link(),
+    ecache:store(fruit, apple, 10),
+    ?assertEqual({ok, 11}, ecache:increment(fruit, apple)),
+    ?assertEqual({ok, 12}, ecache:increment(fruit, apple)),
+    ?assertEqual({ok, 12}, ecache:load(fruit, apple)),
+    ecache:store(fruit, apple, "10"),
+    ?assertEqual({error, not_an_integer}, ecache:increment(fruit, apple)),
+    ?assertEqual({error, not_found}, ecache:increment(fruit, peach)),
+    ecache:stop().
+
+decrement_test() ->
+    ecache:start_link(),
+    ecache:store(fruit, apple, 10),
+    ?assertEqual({ok, 9}, ecache:decrement(fruit, apple)),
+    ?assertEqual({ok, 8}, ecache:decrement(fruit, apple)),
+    ?assertEqual({ok, 8}, ecache:load(fruit, apple)),
+    ecache:store(fruit, apple, "10"),
+    ?assertEqual({error, not_an_integer}, ecache:decrement(fruit, apple)),
+    ?assertEqual({error, not_found}, ecache:decrement(fruit, peach)),
+    ecache:stop().
+
 load_store_test() ->
     ecache:start_link(),
     ecache:store(autos, <<"ford">>, 10),
@@ -77,7 +139,7 @@ load_store_test() ->
     ?assertEqual({ok, 9}, ecache:load(autos, <<"toyota">>)),
     ?assertEqual({ok, "Santa Clara"}, ecache:load(<<"cpu">>, "intel")),
     ?assertEqual({ok, "Sunnyvale"}, ecache:load(<<"cpu">>, "amd")),
-    ?assertEqual({error, none}, ecache:load("cpu", "amd")),
+    ?assertEqual({error, not_found}, ecache:load("cpu", "amd")),
     ecache:store(autos, <<"toyota">>, 1),
     ?assertEqual({ok, 1}, ecache:load(autos, <<"toyota">>)),
     ecache:stop().
