@@ -4,6 +4,7 @@
          stop/0,
          load/1,
          store/2,
+         store/3,
          delete/1,
          count/0,
          flush/0,
@@ -33,6 +34,10 @@ load(Key) ->
 % @spec store(Key::any(), Value::any()) -> ok
 store(Key, Value) ->
     gen_server:cast(?MODULE, {store, Key, Value}).
+
+% @spec store(Key::any(), Value::any(), Seconds::integer()) -> ok
+store(Key, Value, Seconds) when Seconds >= 0 ->
+    gen_server:cast(?MODULE, {store, Key, Value, Seconds}).
 
 % @spec delete(Key::any()) -> ok
 delete(Key) ->
@@ -66,8 +71,16 @@ handle_call({load, Key}, _From, Table) ->
         [] ->
             {reply, {error, not_found}, Table};
         [Data|[]] ->
-            {Key, Value} = Data,
-            {reply, {ok, Value}, Table}
+            {Key, Value, ExpirationTime} = Data,
+            % check if the value has already expired
+            case ExpirationTime > 0 andalso ExpirationTime < now_seconds() of
+                true ->
+                    % the value has expired - delete it and return an error
+                    true = ets:delete(Table, Key),
+                    {reply, {error, not_found}, Table};
+                false ->
+                    {reply, {ok, Value}, Table}
+            end
     end;
 handle_call(count, _From, Table) ->
     Count = proplists:get_value(size, ets:info(Table)),
@@ -77,11 +90,11 @@ handle_call({increment_or_decrement, Key, Fun}, _From, Table) ->
         [] ->
             {reply, {error, not_found}, Table};
         [Data|[]] ->
-            {Key, Value} = Data,
+            {Key, Value, ExpirationTime} = Data,
             case is_integer(Value) of
                 true ->
                     NewValue = Fun(Value),
-                    true = ets:insert(Table, {Key, NewValue}),
+                    true = ets:insert(Table, {Key, NewValue, ExpirationTime}),
                     {reply, {ok, NewValue}, Table};
                 false ->
                     {reply, {error, not_an_integer}, Table}
@@ -91,7 +104,12 @@ handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
 handle_cast({store, Key, Value}, Table) ->
-    true = ets:insert(Table, {Key, Value}),
+    % 0 is the magic number indicating that the value will not expire
+    true = ets:insert(Table, {Key, Value, 0}),
+    {noreply, Table};
+handle_cast({store, Key, Value, Seconds}, Table) ->
+    ExpirationTime = now_seconds() + Seconds,
+    true = ets:insert(Table, {Key, Value, ExpirationTime}),
     {noreply, Table};
 handle_cast({delete, Key}, Table) ->
     true = ets:delete(Table, Key),
@@ -118,6 +136,9 @@ code_change(_OldVsn, State, _Extra) ->
 new_table() ->
     ets:new(ecache_table, [private]).
 
+now_seconds() ->
+    calendar:datetime_to_gregorian_seconds(calendar:universal_time()).
+
 load_store_test() ->
     ecache:start_link(),
     ecache:store({autos, <<"ford">>}, 10),
@@ -131,6 +152,15 @@ load_store_test() ->
     ?assertEqual({error, not_found}, ecache:load(<<"amd">>)),
     ecache:store({autos, <<"toyota">>}, 1),
     ?assertEqual({ok, 1}, ecache:load({autos, <<"toyota">>})),
+    ecache:stop().
+
+expiration_test() ->
+    ecache:start_link(),
+    ecache:store(fruit, "apple", 1),
+    ?assertEqual({ok, "apple"}, ecache:load(fruit)),
+    timer:sleep(2000),
+    ?assertEqual({error, not_found}, ecache:load(fruit)),
+    ?assertEqual(0, ecache:count()),
     ecache:stop().
 
 delete_test() ->
