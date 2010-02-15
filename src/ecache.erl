@@ -25,7 +25,6 @@ stop() ->
     gen_server:cast(?MODULE, stop).
 
 init([]) ->
-    ecache_purge_server:start_link(),
     {ok, new_table()}.
 
 % @spec load(Key::any()) -> {ok, any()} | {error, not_found}
@@ -113,7 +112,6 @@ handle_cast(flush, Table) ->
     true = ets:delete(Table),
     {noreply, new_table()};
 handle_cast(stop, Table) ->
-    ecache_purge_server:stop(),
     true = ets:delete(Table),
     {stop, normal, Table};
 handle_cast(_Msg, State) ->
