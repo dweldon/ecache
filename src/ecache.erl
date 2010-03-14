@@ -17,6 +17,7 @@
 -behaviour(gen_server).
 -export([start_link/0,
          stop/0,
+         load_all/0,
          load/1,
          store/2,
          store/3,
@@ -41,6 +42,11 @@ stop() ->
 
 init([]) ->
     {ok, new_table()}.
+
+% @spec load_all() -> {ok, [Row]}
+%       Row = {Key::any()), Value::any())}
+load_all() ->
+    gen_server:call(?MODULE, load_all).
 
 % @spec load(Key::any()) -> {ok, any()} | {error, not_found}
 load(Key) ->
@@ -81,6 +87,21 @@ decrement(Key) ->
     gen_server:call(?MODULE, {increment_or_decrement, Key, Fun}).
 
 %-------------------------------------------------------------------------------
+handle_call(load_all, _From, Table) ->
+    Now = ecache_util:now_seconds(),
+    LoadFun =
+        fun({Key, Value, ExpTime}, Loaded) ->
+            % check if the value has already expired
+            case ExpTime > 0 andalso ExpTime < Now of
+                true ->
+                    % the value has expired - delete it
+                    true = ets:delete(Table, Key),
+                    Loaded;
+                false -> [{Key, Value}|Loaded]
+            end
+        end,
+    Reply = {ok, ets:foldr(LoadFun, [], Table)},
+    {reply, Reply, Table};
 handle_call({load, Key}, _From, Table) ->
     case load_and_delete_if_expired(Key, Table) of
         {error, not_found} ->
@@ -176,6 +197,20 @@ load_store_test() ->
     ?assertEqual({error, not_found}, ecache:load(<<"amd">>)),
     ecache:store({autos, <<"toyota">>}, 1),
     ?assertEqual({ok, 1}, ecache:load({autos, <<"toyota">>})),
+    ecache:stop().
+
+load_all_test() ->
+    ecache:start_link(),
+    ecache:store(a, "a", 1),
+    ecache:store(b, "b", 5),
+    ecache:store(c, "c"),
+    {ok, L1} = ecache:load_all(),
+    Expected1 = [{a, "a"}, {b, "b"}, {c, "c"}],
+    timer:sleep(2000),
+    {ok, L2} = ecache:load_all(),
+    Expected2 = [{b, "b"}, {c, "c"}],
+    ?assertEqual(Expected1, lists:sort(L1)),
+    ?assertEqual(Expected2, lists:sort(L2)),
     ecache:stop().
 
 expiration_test() ->

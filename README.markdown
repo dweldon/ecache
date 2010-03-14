@@ -7,7 +7,7 @@ keys.
 Installation
 ------------
     git clone git://github.com/dweldon/ecache.git
-    cd ecache && make && make test
+    cd ecache && make
 
 Start ecache
 ------------
@@ -15,6 +15,7 @@ Start ecache
 
 Interface
 ---------
+* load_all()
 * load(Key)
 * store(Key, Value)
 * store(Key, Value, Seconds)
@@ -45,6 +46,14 @@ Examples
     % wait 5 seconds...
     ecache:load(fruit).
     {error,not_found}
+
+### load all
+    ecache:store(apples, 100).
+    ok
+    ecache:store(oranges, 200).
+    ok
+    ecache:load_all().
+    {ok,[{apples,100},{oranges,200}]}
 
 ### increment and decrement
     ecache:store(fruit, 100).
