@@ -32,7 +32,9 @@
          handle_info/2,
          terminate/2,
          code_change/3]).
+-ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
+-endif.
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
@@ -44,7 +46,7 @@ init([]) ->
     {ok, new_table()}.
 
 % @spec load_all() -> {ok, [Row]}
-%       Row = {Key::any()), Value::any())}
+%       Row = {Key::any(), Value::any()}
 load_all() ->
     gen_server:call(?MODULE, load_all).
 
@@ -86,7 +88,6 @@ decrement(Key) ->
     Fun = fun(X) -> X - 1 end,
     gen_server:call(?MODULE, {increment_or_decrement, Key, Fun}).
 
-%-------------------------------------------------------------------------------
 handle_call(load_all, _From, Table) ->
     Now = ecache_util:now_seconds(),
     LoadFun =
@@ -162,11 +163,10 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-%-------------------------------------------------------------------------------
 new_table() ->
     ets:new(ecache_table, [private]).
 
-% @spec load(Key::any()) -> {ok, any()} | {error, not_found}
+% @spec load_and_delete_if_expired(any(), tid()) -> {ok, any()} | {error, not_found}
 load_and_delete_if_expired(Key, Table) ->
     case ets:lookup(Table, Key) of
         [] -> {error, not_found};
@@ -183,7 +183,8 @@ load_and_delete_if_expired(Key, Table) ->
             end
     end.
 
-%-------------------------------------------------------------------------------
+-ifdef(TEST).
+
 load_store_test() ->
     ecache:start_link(),
     ecache:store({autos, <<"ford">>}, 10),
@@ -272,3 +273,5 @@ decrement_test() ->
     ?assertEqual({error, not_an_integer}, ecache:decrement(apple)),
     ?assertEqual({error, not_found}, ecache:decrement(peach)),
     ecache:stop().
+
+-endif.

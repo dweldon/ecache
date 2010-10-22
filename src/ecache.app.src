@@ -1,0 +1,7 @@
+{application, ecache,
+ [{description, "ecache"},
+  {vsn, "0.1"},
+  {registered, []},
+  {applications, [kernel, stdlib]},
+  {mod, { ecache_app, []}},
+  {env, []}]}.

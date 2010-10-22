@@ -24,7 +24,6 @@
          handle_info/2,
          terminate/2,
          code_change/3]).
--include_lib("eunit/include/eunit.hrl").
 -define(PURGE_PAUSE_TIME, 5000).
 
 start_link() ->
