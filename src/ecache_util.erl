@@ -16,6 +16,9 @@
 -module(ecache_util).
 -export([now_seconds/0]).
 
+%% @spec now_seconds() -> integer()
+%% @doc Returns the total number of seconds elapsed in Unix time.
+-spec now_seconds() -> pos_integer().
 now_seconds() ->
     {MegaSeconds, Seconds, _} = now(),
     1000000 * MegaSeconds + Seconds.
