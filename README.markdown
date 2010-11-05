@@ -17,7 +17,7 @@ Interface
 ---------
 ### Functions
 * store(Key, Value)
-* store(Key, Value, Seconds)
+* store(Key, Value, Timeout)
 * load(Key)
 * load_all()
 * delete(Key)
@@ -29,14 +29,14 @@ Interface
 The following examples give an overview of the ecache interface. Please see the
 complete documentation by running `make doc`.
 
-### basic store and load
+### Basic Store and Load
     > ecache:store("car", "honda:2006").
     ok
 
     > ecache:load("car").
     {ok,"honda:2006"}
 
-### store with a timeout
+### Store with a Timeout
     > ecache:store(<<"fruit">>, ["apples", "oranges"], 10).
     ok
 
@@ -48,7 +48,7 @@ complete documentation by running `make doc`.
     > ecache:load(<<"fruit">>).
     {error,not_found}
 
-### load all
+### Load All
     > ecache:store(apples, 100).
     ok
 
@@ -58,7 +58,7 @@ complete documentation by running `make doc`.
     > ecache:load_all().
     {ok,[{apples,100},{oranges,200}]}
 
-### increment and decrement
+### Increment and Decrement
     > ecache:store({fruit, <<"apple">>}, 100).
     ok
 
@@ -70,12 +70,12 @@ complete documentation by running `make doc`.
 
 Notes
 -----
-### namespaces
+### Namespaces
 Although namespaces are not explicitly supported by the interface, they can be
 achieved by storing a tuple as the key. For example:
 `ecache:store({ip, <<”192.168.1.1”>>}, 1).`
 
-### timeouts
+### Timeouts
 Storing with a timeout of 0 seconds is equivalent to not storing with a timeout. 
 Subsequent stores to the same key will always use the most recent timeout value
 (if one was given).
